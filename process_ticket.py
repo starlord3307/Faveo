@@ -1,105 +1,74 @@
+import sys
+import os
 import json
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForSequenceClassification
 
+# Set the cache directory to ensure the model is loaded from cache
+cache_dir = os.path.expanduser("~/.cache/huggingface/transformers")
 
-def load_model():
-    """Load the Mistral model for text generation."""
-    return pipeline("text2text-generation", model="mistralai/Mistral-7B-Instruct-v0.2")
+# Define the tags and their descriptions
+TAGS = {
+    "IPWhitelisting": "Adding IP addresses into Okta Security Networks fields if blocked.",
+    "AppLocker": "Used when adding hashes to allow execution of applications (AppLocker or CrowdStrike).",
+    "ADSecurityGroup": "Removing a user from an AD Security group to stop or allow access.",
+    "AttachmentRelease": "Releasing an attachment if password protected.",
+    "EmailWhitelisting": "Allowing emails through ProofPoint or Checkpoint for delivery.",
+    "AppAssignment": "Adding a user to an Application.",
+    "chatops:mfa-bypass": "Automates MFA AD group changes or Requests for the bypass MFA.",
+    "VM": "Removing hosts from Nessus or decommissioning hosts from tracking in Nessus and Tenable.",
+    "PhishingReport": "When a user submits a phishing report or requests email analysis.",
+    "GenericInformation": "Generic tickets assigned to SecOps.",
+    "PasswordReset": "When a ticket needs Okta or AD password reset.",
+    "KeeperAccounts": "Issues with Keeper Password Manager accounts.",
+    "MemberIssues": "Investigating possible security issues with Member accounts.",
+    "ADPassword": "AD password issues, including resets.",
+    "OktaMFAResets": "Okta MFA resets performed by Security or Requests for MFA reset.",
+    "Zscaler": "Issues related to Zscaler security, domain allow/block requests.",
+    "chatops:cs-usb": "Automates individual USB whitelisting.",
+    "USBDeviceControl": "Requests for workstation USB whitelisting.",
+    "Imperva": "Issues related to Imperva and CDN security."
+}
 
+# Initialize the pipelines
+summarizer = pipeline('summarization', 
+                      model=AutoModelForSeq2SeqLM.from_pretrained('facebook/bart-large-cnn', cache_dir=cache_dir),
+                      tokenizer=AutoTokenizer.from_pretrained('facebook/bart-large-cnn', cache_dir=cache_dir))
 
-def summarize_and_tag(model, title, body):
-    """Generate a summary and determine the most accurate tag."""
-    tag_descriptions = {
-        "IPWhitelisting": "Adding IP addresses into Okta Security Networks fields if blocked.",
-        "AppLocker": "Used when adding hashes to allow execution of applications (AppLocker or CrowdStrike).",
-        "ADSecurityGroup": "Removing a user from an AD Security group to stop or allow access.",
-        "AttachmentRelease": "Releasing an attachment if password protected.",
-        "EmailWhitelisting": "Allowing emails through ProofPoint or Checkpoint for delivery.",
-        "AppAssignment": "Adding a user to an Application.",
-        "chatops:mfa-bypass": "Automates MFA AD group changes or Requests for the bypass MFA.",
-        "VM": "Removing hosts from Nessus or decommissioning hosts from tracking in Nessus and Tenable.",
-        "PhishingReport": "When a user submits a phishing report or requests email analysis.",
-        "GenericInformation": "Generic tickets assigned to SecOps.",
-        "PasswordReset": "When a ticket needs Okta or AD password reset.",
-        "KeeperAccounts": "Issues with Keeper Password Manager accounts.",
-        "MemberIssues": "Investigating possible security issues with Member accounts.",
-        "ADPassword": "AD password issues, including resets.",
-        "OktaMFAResets": "Okta MFA resets performed by Security or Requests for MFA reset.",
-        "Zscaler": "Issues related to Zscaler security, domain allow/block requests.",
-        "chatops:cs-usb": "Automates individual USB whitelisting.",
-        "USBDeviceControl": "Requests for workstation USB whitelisting.",
-        "Imperva": "Issues related to Imperva and CDN security."
+classifier = pipeline('zero-shot-classification', 
+                     model=AutoModelForSequenceClassification.from_pretrained('facebook/bart-large-mnli', cache_dir=cache_dir),
+                     tokenizer=AutoTokenizer.from_pretrained('facebook/bart-large-mnli', cache_dir=cache_dir))
+
+# Function to summarize text
+def summarize_text(text: str):
+    summary = summarizer(text, max_length=50, min_length=25, do_sample=False)
+    return summary[0]['summary_text']
+
+# Function to classify the most accurate tag based on the title and body
+def classify_tag(title: str, body: str):
+    combined_text = title + " " + body
+    result = classifier(combined_text, candidate_labels=list(TAGS.keys()))
+    return result['labels'][0]  # Return the most likely tag
+
+# Function to process the ticket and return the output
+def process_ticket(ticket_id, title, body):
+    summary = summarize_text(body)
+    tag = classify_tag(title, body)
+    
+    # Prepare the result in JSON format
+    result = {
+        'summary': summary,
+        'id': ticket_id,
+        'tag': tag
     }
-
-    prompt = (
-        f"Summarize the following ticket body in 1-2 sentences and assign the most relevant tag based on the title and content.\n\n"
-        f"Title: {title}\nBody: {body}\n\n"
-        f"Available tags: {', '.join(tag_descriptions.keys())}\n"
-        f"Response format: Summary: <summary_text> Tag: <most_relevant_tag>"
-    )
-
-    response = model(prompt, max_length=200, do_sample=False)[0]['generated_text']
-
-    # Extract summary and tag from model output
-    summary, tag = response.split("Tag:") if "Tag:" in response else (response, "GenericInformation")
-    summary = summary.replace("Summary:", "").strip()
-    tag = tag.strip()
-
-    # Validate tag
-    return summary, tag if tag in tag_descriptions else "GenericInformation"
-
-
-def process_ticket(ticket, model):
-    """Processes a ticket and returns the summary and tag."""
-    ticket_id = ticket.get("id", "")
-    title = ticket.get("title", "")
-    body = ticket.get("body", "")
-
-    # Log the input payload for debugging
-    print(f"Processing ticket: {ticket_id}")
-    print(f"Title: {title}")
-    print(f"Body: {body}")
-
-    # Check if body is a list (it seems to be based on the sample input)
-    if isinstance(body, str) and body.startswith("[") and body.endswith("]"):
-        body = json.loads(body)  # Parse the body as a JSON list if it's a string of a list
-
-    if isinstance(body, list):
-        body = " ".join(body)  # Convert list to string if needed
-
-    if not ticket_id or not title or not body:
-        return {"error": "ID, Title, and Body are required."}
-
-    summary, tag = summarize_and_tag(model, title, body)
-
-    return {
-        "id": ticket_id,
-        "summary": summary,
-        "tag": tag
-    }
-
+    
+    return json.dumps(result, indent=2)
 
 if __name__ == "__main__":
-    try:
-        # Load input JSON file
-        with open("input.json", "r") as file:
-            event_data = json.load(file)
-        
-        # Access the 'client_payload' field from event_data
-        client_payload = event_data.get("client_payload", {})
-
-        # Extract ticket details from 'client_payload'
-        ticket_data = {
-            "id": client_payload.get("id", ""),
-            "title": client_payload.get("title", ""),
-            "body": client_payload.get("body", [])
-        }
-
-        model = load_model()
-        result = process_ticket(ticket_data, model)
-
-        # Print result in JSON format
-        print(json.dumps(result))
-
-    except Exception as e:
-        print(json.dumps({"error": str(e)}))
+    # Expecting the ticket info from command-line arguments
+    ticket_id = sys.argv[1]
+    title = sys.argv[2]
+    body = sys.argv[3]
+    
+    # Process the ticket and print the result
+    result = process_ticket(ticket_id, title, body)
+    print(result)
