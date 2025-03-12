@@ -49,8 +49,15 @@ def clean_ticket_body(text: str):
 
 # Function to summarize text
 def summarize_text(text: str):
-    cleaned_text = clean_ticket_body(text)  # Clean the text before summarization
-    summary = summarizer(cleaned_text, max_length=50, min_length=25, do_sample=False)
+    # Use the summarization pipeline with dynamic max and min lengths
+    summary = summarizer(
+        text,  # Directly passing the ticket body
+        max_length=150,  # Set max length to 150 tokens
+        min_length=50,   # Set min length to 50 tokens
+        length_penalty=1.0,  # Keep summary length balanced
+        do_sample=False,  # Ensure deterministic output
+        truncation=True  # Truncate if text exceeds model token limit
+    )
     return summary[0]['summary_text']
 
 # Function to classify the most accurate tag based on the title and body
