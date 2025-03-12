@@ -55,6 +55,11 @@ def process_ticket(ticket, model):
     title = ticket.get("title", "")
     body = ticket.get("body", "")
 
+    # Log the input payload for debugging
+    print(f"Processing ticket: {ticket_id}")
+    print(f"Title: {title}")
+    print(f"Body: {body}")
+
     # Check if body is a list (it seems to be based on the sample input)
     if isinstance(body, str) and body.startswith("[") and body.endswith("]"):
         body = json.loads(body)  # Parse the body as a JSON list if it's a string of a list
