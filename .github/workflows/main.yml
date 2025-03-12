@@ -1,56 +1,58 @@
-name: Process Faveo Ticket
+name: Ticket Summarization and Tagging
 
 on:
-  repository_dispatch:
-    types: [tines_ticket]
+  workflow_dispatch:
+    inputs:
+      title:
+        description: 'Ticket Title'
+        required: true
+      body:
+        description: 'Ticket Body'
+        required: true
+      id:
+        description: 'Ticket ID'
+        required: true
 
 jobs:
-  process_ticket:
+  process-tickets:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      # Checkout the repository code
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      - name: Set Up Python
-        uses: actions/setup-python@v4
+      # Set up Python environment
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: '3.8'
 
-      - name: Cache Python dependencies
-        uses: actions/cache@v4
+      # Cache pip dependencies
+      - name: Cache pip dependencies
+        uses: actions/cache@v2
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-pip-
+            ${{ runner.os }}-python-
 
-      - name: Install Dependencies
-        run: pip install --upgrade -r requirements.txt
-
-      - name: Cache Model
-        uses: actions/cache@v4
+      # Cache Hugging Face model files
+      - name: Cache Hugging Face model
+        uses: actions/cache@v2
         with:
-          path: ./model
-          key: model-mistral-7b-${{ hashFiles('requirements.txt') }}
+          path: ~/.cache/huggingface/transformers
+          key: ${{ runner.os }}-hf-model-${{ hashFiles('**/requirements.txt') }}
           restore-keys: |
-            model-mistral-7b-
+            ${{ runner.os }}-hf-model-
 
-      - name: Load Model (If Not Cached)
+      # Install dependencies
+      - name: Install dependencies
         run: |
-          if [ ! -d "./model" ]; then
-            echo "Model not found. Downloading..."
-            python -c "from transformers import AutoModelForSeq2SeqLM; AutoModelForSeq2SeqLM.from_pretrained('mistralai/Mistral-7B-Instruct-v0.2').save_pretrained('./model')"
-          else
-            echo "Model found in cache."
-          fi
-        
-      - name: Process Ticket
-        run: python process_ticket.py '${{ toJson(github.event) }}' > output.json
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Send Output to Tines
+      # Run the Python script with inputs from Tines
+      - name: Process Faveo ticket
         run: |
-          curl -X POST "https://your-tines-endpoint.com/webhook" \
-               -H "Content-Type: application/json" \
-               -d @output.json
+          python summarize_and_tag.py "${{ github.event.inputs.id }}" "${{ github.event.inputs.title }}" "${{ github.event.inputs.body }}"
