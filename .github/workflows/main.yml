@@ -45,9 +45,6 @@ jobs:
           else
             echo "Model found in cache."
           fi
-          
-      - name: Write event data to input.json
-        run: echo '${{ toJson(github.event) }}' > input.json
         
       - name: Process Ticket
         run: python process_ticket.py '${{ toJson(github.event) }}' > output.json
