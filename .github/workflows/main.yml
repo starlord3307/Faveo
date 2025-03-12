@@ -1,17 +1,8 @@
 name: Ticket Summarization and Tagging
 
 on:
-  workflow_dispatch:
-    inputs:
-      title:
-        description: 'Ticket Title'
-        required: true
-      body:
-        description: 'Ticket Body'
-        required: true
-      id:
-        description: 'Ticket ID'
-        required: true
+  repository_dispatch:
+    types: [tines_ticket]  # This event type matches the 'event_type' you set in Tines
 
 jobs:
   process-tickets:
@@ -33,26 +24,27 @@ jobs:
         uses: actions/cache@v2
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}  # Cache key based on the hash of requirements.txt
           restore-keys: |
             ${{ runner.os }}-python-
+
+      # Install dependencies (only if the cache is missing or requirements.txt has changed)
+      - name: Install dependencies
+        if: steps.cache-pip.outputs.cache-hit != 'true'  # Skip installation if cache hit is true
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       # Cache Hugging Face model files
       - name: Cache Hugging Face model
         uses: actions/cache@v2
         with:
           path: ~/.cache/huggingface/transformers
-          key: ${{ runner.os }}-hf-model-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-hf-model-${{ hashFiles('**/requirements.txt') }}  # Cache Hugging Face model files similarly
           restore-keys: |
             ${{ runner.os }}-hf-model-
-
-      # Install dependencies
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
 
       # Run the Python script with inputs from Tines
       - name: Process Faveo ticket
         run: |
-          python process_ticket.py "${{ github.event.inputs.id }}" "${{ github.event.inputs.title }}" "${{ github.event.inputs.body }}"
+          python process_ticket.py "${{ github.event.client_payload.id }}" "${{ github.event.client_payload.title }}" "${{ github.event.client_payload.body }}"
