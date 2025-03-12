@@ -7,8 +7,8 @@ on:
 jobs:
   process_ticket:
     runs-on: ubuntu-latest
-    steps:
 
+    steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
@@ -18,23 +18,39 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
 
-      - name: Restore Cached Model
-        id: cache-model
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        run: pip install --upgrade -r requirements.txt
+
+      - name: Cache Model
         uses: actions/cache@v4
         with:
           path: ./model
-          key: model-mistral-7b
-
-      - name: Install Dependencies
-        run: pip install -r requirements.txt
+          key: model-mistral-7b-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            model-mistral-7b-
 
       - name: Load Model (If Not Cached)
         run: |
           if [ ! -d "./model" ]; then
+            echo "Model not found. Downloading..."
             python -c "from transformers import AutoModelForSeq2SeqLM; AutoModelForSeq2SeqLM.from_pretrained('mistralai/Mistral-7B-Instruct-v0.2').save_pretrained('./model')"
+          else
+            echo "Model found in cache."
           fi
 
       - name: Process Ticket
+        run: python process_ticket.py '${{ toJson(github.event) }}' > output.json
+
+      - name: Send Output to Tines
         run: |
-          echo '${{ toJson(github.event.inputs) }}' > input.json
-          python process_ticket.py input.json
+          curl -X POST "https://your-tines-endpoint.com/webhook" \
+               -H "Content-Type: application/json" \
+               -d @output.json
