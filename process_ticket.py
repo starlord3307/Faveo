@@ -1,7 +1,7 @@
 import sys
 import os
 import json
-from transformers import pipeline, AutoTokenizer, AutoModelForSeq2SeqLM, AutoModelForSequenceClassification
+from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
 
 # Set the cache directory to ensure the model is loaded from cache
 cache_dir = os.path.expanduser("~/.cache/huggingface/transformers")
@@ -29,39 +29,53 @@ TAGS = {
     "Imperva": "Issues related to Imperva and CDN security."
 }
 
-# Initialize the pipelines
-summarizer = pipeline('summarization', 
-                      model=AutoModelForSeq2SeqLM.from_pretrained('facebook/bart-large-cnn', cache_dir=cache_dir),
-                      tokenizer=AutoTokenizer.from_pretrained('facebook/bart-large-cnn', cache_dir=cache_dir))
+# Initialize the Mistral-7B model for text generation (used for both summarization and classification)
+model_name = 'mistralai/Mistral-7B-Instruct-v0.3'
 
-classifier = pipeline('zero-shot-classification', 
-                     model=AutoModelForSequenceClassification.from_pretrained('facebook/bart-large-mnli', cache_dir=cache_dir),
-                     tokenizer=AutoTokenizer.from_pretrained('facebook/bart-large-mnli', cache_dir=cache_dir))
+# Load the tokenizer and model
+tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
+model = AutoModelForCausalLM.from_pretrained(model_name, cache_dir=cache_dir)
 
-# Function to summarize text
-def summarize_text(text: str):
-    summary = summarizer(text, max_length=50, min_length=25, do_sample=False)
-    return summary[0]['summary_text']
+# Initialize the text generation pipeline
+generator = pipeline('text-generation', model=model, tokenizer=tokenizer)
 
-# Function to classify the most accurate tag based on the title and body
-def classify_tag(title: str, body: str):
-    combined_text = title + " " + body
-    result = classifier(combined_text, candidate_labels=list(TAGS.keys()))
-    return result['labels'][0]  # Return the most likely tag
-
-# Function to process the ticket and return the output
+# Function to process the ticket, summarize and classify tags
 def process_ticket(ticket_id, title, body):
-    summary = summarize_text(body)
-    tag = classify_tag(title, body)
+    # Create the prompt with the new structure
+    prompt = f"Summarize the following ticket body in 1-2 sentences and assign the most relevant tag based on the title and content.\n\n"
+    prompt += f"Title: {title}\nBody: {body}\n\n"
+    prompt += f"Available tags: {', '.join(TAGS.keys())}\n"
+    prompt += f"Response format: Summary: <summary_text> Tag: <most_relevant_tag>"
+    
+    # Generate the response from the model
+    result = generator(prompt, max_length=350, num_return_sequences=1)
+
+    # Extract the generated text from the result
+    generated_text = result[0]['generated_text']
+    
+    # Split the response into summary and tag based on format
+    try:
+        summary_start = generated_text.find("Summary:") + len("Summary: ")
+        tag_start = generated_text.find("Tag:") + len("Tag: ")
+
+        summary_text = generated_text[summary_start:tag_start].strip()
+        tag_text = generated_text[tag_start:].strip()
+
+        # Ensure no extra spaces or unwanted text
+        summary_text = summary_text.split("\n")[0]  # Take the first line as summary
+        tag_text = tag_text.split("\n")[0]  # Take the first line as tag
+    except ValueError:
+        summary_text = "No summary available."
+        tag_text = "GenericInformation"
     
     # Prepare the result in JSON format
-    result = {
-        'summary': summary,
+    result_json = {
+        'summary': summary_text,
         'id': ticket_id,
-        'tag': tag
+        'tag': tag_text
     }
-    
-    return json.dumps(result, indent=2)
+
+    return json.dumps(result_json, indent=2)
 
 if __name__ == "__main__":
     # Expecting the ticket info from command-line arguments
