@@ -41,16 +41,17 @@ classifier = pipeline('zero-shot-classification',
 
 
 # Function to summarize text
+def clean_ticket_body(text: str):
+    # Remove non-text symbols like {{}} and [ ]
+    cleaned_text = text.replace("{{", "").replace("}}", "").replace("[", "").replace("]", "")
+    return cleaned_text
+
 def summarize_text(text: str):
-    # General prompt for summarization without specifying max_length and min_length
-    prompt = (
-        "Summarize the following ticket body into 1-2 sentences while retaining the most important details.\n\n"
-        f"Ticket Body: {text}\n\n"
-        "Response format: A concise summary in 1-2 sentences."
-    )
+    # Clean the ticket body before summarization
+    cleaned_text = clean_ticket_body(text)
     
-    # Use the summarization pipeline without max_length and min_length
-    summary = summarizer(prompt, do_sample=False)
+    # Summarize the cleaned text
+    summary = summarizer(cleaned_text, max_length=50, min_length=25, do_sample=False)
     return summary[0]['summary_text']
 
 
