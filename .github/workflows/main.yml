@@ -1,0 +1,44 @@
+name: Process Faveo Ticket
+
+on:
+  repository_dispatch:
+    types: [tines_ticket]
+
+jobs:
+  process_ticket:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Restore Cached Model
+        id: cache-model
+        uses: actions/cache@v4
+        with:
+          path: ./model
+          key: model-mistral-7b
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Load Model (If Not Cached)
+        run: |
+          if [ ! -d "./model" ]; then
+            python -c "from transformers import AutoModelForSeq2SeqLM; AutoModelForSeq2SeqLM.from_pretrained('mistralai/Mistral-7B-Instruct-v0.2').save_pretrained('./model')"
+          fi
+
+      - name: Process Ticket
+        run: python process_ticket.py '${{ toJson(github.event) }}' > output.json
+
+      - name: Send Output to Tines
+        run: |
+          curl -X POST "https://your-tines-endpoint.com/webhook" \
+               -H "Content-Type: application/json" \
+               -d @output.json
