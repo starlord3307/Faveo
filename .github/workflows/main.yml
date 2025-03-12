@@ -55,4 +55,4 @@ jobs:
       # Run the Python script with inputs from Tines
       - name: Process Faveo ticket
         run: |
-          python summarize_and_tag.py "${{ github.event.inputs.id }}" "${{ github.event.inputs.title }}" "${{ github.event.inputs.body }}"
+          python process_ticket.py "${{ github.event.inputs.id }}" "${{ github.event.inputs.title }}" "${{ github.event.inputs.body }}"
