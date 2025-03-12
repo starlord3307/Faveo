@@ -36,9 +36,3 @@ jobs:
 
       - name: Process Ticket
         run: python process_ticket.py '${{ toJson(github.event) }}' > output.json
-
-      - name: Send Output to Tines
-        run: |
-          curl -X POST "https://your-tines-endpoint.com/webhook" \
-               -H "Content-Type: application/json" \
-               -d @output.json
