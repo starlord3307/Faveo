@@ -1,3 +1,4 @@
+import re
 import sys
 import os
 import json
@@ -41,19 +42,39 @@ classifier = pipeline('zero-shot-classification',
 
 # Function to clean the ticket body
 def clean_ticket_body(text: str):
-    # Remove extra symbols and irrelevant characters
+    # Remove or escape curly braces and square brackets
     cleaned_text = text.replace("{{", "").replace("}}", "").replace("[", "").replace("]", "")
-    # Further cleaning to handle other unwanted symbols or patterns
+    
+    # Replace newline characters with space (or use other formatting as needed)
+    cleaned_text = cleaned_text.replace("\n", " ")
+    
+    # Optionally, escape parentheses or remove them (depending on your needs)
+    cleaned_text = re.sub(r'[\(\)]', '', cleaned_text)  # Removes parentheses
+    
+    # Optionally, escape quotes (double or single)
+    cleaned_text = re.sub(r'["\']', '', cleaned_text)  # Removes quotes
+    
+    # Remove any extra whitespace (like tabs, multiple spaces, etc.)
     cleaned_text = ' '.join(cleaned_text.split())  # Removes excess whitespace
+    
     return cleaned_text
 
-# Function to summarize text
-def summarize_text(text: str):
-    # Use the summarization pipeline with dynamic max and min lengths
+# Define the prompt for summarization and tagging
+def generate_prompt(title, body):
+    return [
+        {"role": "system", "content": "You are an AI that summarizes security tickets and assigns a single most relevant tag based on the title and body."},
+        {"role": "user", "content": f"Title: {title}\nBody: {body}\n\n### TASK 1: Summarization\nSummarize the ticket body in 1-2 sentences.\n\n### TASK 2: Tagging\nChoose the **one best tag** from this list that matches the ticket:\n {TAGS}\n\nReturn output in JSON format with keys: 'summary' (ticket summary) and 'tag' (best matching tag)."}
+    ]
+
+# Function to summarize text using prompt
+def summarize_text(title, body):
+    prompt = generate_prompt(title, body)
+    
+    # Use the summarization pipeline (BART model for text generation) with the dynamic prompt
     summary = summarizer(
-        text,  # Directly passing the ticket body
+        prompt[1]['content'],  # Send the user content (the prompt)
         max_length=150,  # Set max length to 150 tokens
-        min_length=50,   # Set min length to 50 tokens
+        min_length=10,   # Set min length to 50 tokens
         length_penalty=1.0,  # Keep summary length balanced
         do_sample=False,  # Ensure deterministic output
         truncation=True  # Truncate if text exceeds model token limit
@@ -68,7 +89,11 @@ def classify_tag(title: str, body: str):
 
 # Function to process the ticket and return the output
 def process_ticket(ticket_id, title, body):
-    summary = summarize_text(body)
+    # Clean the body text to remove unwanted symbols
+    body = clean_ticket_body(body)
+    
+    # Get the summary and tag based on the cleaned body and title
+    summary = summarize_text(title, body)
     tag = classify_tag(title, body)
 
     # Prepare the result in JSON format
