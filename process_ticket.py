@@ -76,12 +76,14 @@ if __name__ == "__main__":
         with open("input.json", "r") as file:
             event_data = json.load(file)
         
-        inputs = event_data.get("inputs", {})
+        # Access the 'client_payload' field from event_data
+        client_payload = event_data.get("client_payload", {})
 
+        # Extract ticket details from 'client_payload'
         ticket_data = {
-            "id": inputs.get("id", ""),
-            "title": inputs.get("title", ""),
-            "body": inputs.get("body", "")
+            "id": client_payload.get("id", ""),
+            "title": client_payload.get("title", ""),
+            "body": client_payload.get("body", [])
         }
 
         model = load_model()
