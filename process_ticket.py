@@ -1,13 +1,14 @@
 import json
-import sys
 from transformers import pipeline
 
 
 def load_model():
+    """Load the Mistral model for text generation."""
     return pipeline("text2text-generation", model="mistralai/Mistral-7B-Instruct-v0.2")
 
 
 def summarize_and_tag(model, title, body):
+    """Generate a summary and determine the most accurate tag."""
     tag_descriptions = {
         "IPWhitelisting": "Adding IP addresses into Okta Security Networks fields if blocked.",
         "AppLocker": "Used when adding hashes to allow execution of applications (AppLocker or CrowdStrike).",
@@ -39,20 +40,23 @@ def summarize_and_tag(model, title, body):
 
     response = model(prompt, max_length=200, do_sample=False)[0]['generated_text']
 
+    # Extract summary and tag from model output
     summary, tag = response.split("Tag:") if "Tag:" in response else (response, "GenericInformation")
     summary = summary.replace("Summary:", "").strip()
     tag = tag.strip()
 
+    # Validate tag
     return summary, tag if tag in tag_descriptions else "GenericInformation"
 
 
 def process_ticket(ticket, model):
+    """Processes a ticket and returns the summary and tag."""
     ticket_id = ticket.get("id", "")
     title = ticket.get("title", "")
     body = ticket.get("body", "")
 
     if isinstance(body, list):
-        body = " ".join(body)  # Join multiple body messages into a single string
+        body = " ".join(body)  # Convert list to string if needed
 
     if not ticket_id or not title or not body:
         return {"error": "ID, Title, and Body are required."}
@@ -67,15 +71,24 @@ def process_ticket(ticket, model):
 
 
 if __name__ == "__main__":
-    event_data = json.loads(sys.argv[1])  # GitHub Actions passes event data as JSON
-    inputs = event_data.get("inputs", {})
+    try:
+        # Load input JSON file
+        with open("input.json", "r") as file:
+            event_data = json.load(file)
+        
+        inputs = event_data.get("inputs", {})
 
-    ticket_data = {
-        "id": inputs.get("id", ""),
-        "title": inputs.get("title", ""),
-        "body": inputs.get("body", [])
-    }
+        ticket_data = {
+            "id": inputs.get("id", ""),
+            "title": inputs.get("title", ""),
+            "body": inputs.get("body", "")
+        }
 
-    model = load_model()
-    result = process_ticket(ticket_data, model)
-    print(json.dumps(result))
+        model = load_model()
+        result = process_ticket(ticket_data, model)
+
+        # Print result in JSON format
+        print(json.dumps(result))
+
+    except Exception as e:
+        print(json.dumps({"error": str(e)}))
