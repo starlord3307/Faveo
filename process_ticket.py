@@ -30,7 +30,7 @@ TAGS = {
 }
 
 # Initialize the Mistral-7B model for text generation (used for both summarization and classification)
-model_name = 'mistralai/Mistral-7B-Instruct-v0.3'
+model_name = 'starlord3307/mistral-gpt'
 
 # Load the tokenizer and model
 tokenizer = AutoTokenizer.from_pretrained(model_name, cache_dir=cache_dir)
