@@ -35,4 +35,6 @@ jobs:
           fi
 
       - name: Process Ticket
-        run: python process_ticket.py '${{ toJson(github.event) }}' > output.json
+        run: |
+          echo '${{ toJson(github.event.inputs) }}' > input.json
+          python process_ticket.py input.json
