@@ -39,29 +39,25 @@ classifier = pipeline('zero-shot-classification',
                                                                                cache_dir=cache_dir),
                       tokenizer=AutoTokenizer.from_pretrained('facebook/bart-large-mnli', cache_dir=cache_dir))
 
-
-# Function to summarize text
+# Function to clean the ticket body
 def clean_ticket_body(text: str):
-    # Remove non-text symbols like {{}} and [ ]
+    # Remove extra symbols and irrelevant characters
     cleaned_text = text.replace("{{", "").replace("}}", "").replace("[", "").replace("]", "")
+    # Further cleaning to handle other unwanted symbols or patterns
+    cleaned_text = ' '.join(cleaned_text.split())  # Removes excess whitespace
     return cleaned_text
 
+# Function to summarize text
 def summarize_text(text: str):
-    # Clean the ticket body before summarization
-    cleaned_text = clean_ticket_body(text)
-    
-    # Summarize the cleaned text
+    cleaned_text = clean_ticket_body(text)  # Clean the text before summarization
     summary = summarizer(cleaned_text, max_length=50, min_length=25, do_sample=False)
     return summary[0]['summary_text']
-
-
 
 # Function to classify the most accurate tag based on the title and body
 def classify_tag(title: str, body: str):
     combined_text = title + " " + body
     result = classifier(combined_text, candidate_labels=list(TAGS.keys()))
     return result['labels'][0]  # Return the most likely tag
-
 
 # Function to process the ticket and return the output
 def process_ticket(ticket_id, title, body):
@@ -77,13 +73,11 @@ def process_ticket(ticket_id, title, body):
 
     return json.dumps(result, indent=2)
 
-
+# Main execution
 if __name__ == "__main__":
-    # Expecting the ticket info from command-line arguments
     ticket_id = sys.argv[1]
     title = sys.argv[2]
     body = sys.argv[3]
 
-    # Process the ticket and print the result
     result = process_ticket(ticket_id, title, body)
     print(result)
